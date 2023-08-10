@@ -6,7 +6,7 @@
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
 
-#define PANIC(ERROR, FORMAT, ...) {if (ERROR) { fprintf(stderr, "%s -> %s -> %i -> Error(%i)" FORMAT, __FILE_NAME__, __FUNCTION__, __LINE__, ERROR, ##__VA_ARGS__); raise(SIGABRT); }}
+#define PANIC(ERROR, FORMAT, ...) {if (ERROR) { fprintf(stderr, "%s -> %s -> %i -> Error(%i)" FORMAT "\n", __FILE_NAME__, __FUNCTION__, __LINE__, ERROR, ##__VA_ARGS__); raise(SIGABRT); }}
 
 // GLFW Error Callback
 void glfwErrorCallback(int error_code, const char *description) {
@@ -20,17 +20,23 @@ void exitCallback() {
 
 // State Struct holds all info about the program
 typedef struct {
-    GLFWwindow *window;
-    GLFWmonitor *window_monitor;
-
-    char **window_title;
+    // Window Properties / Configurable Values
+    const char *applicationName;
+    const char *engineName;
+    const char *window_title;
     int width, height;
     bool resizable;
     bool window_fullscreen;
 
+    // GLFW
+    GLFWwindow *window;
+    GLFWmonitor *window_monitor;
+
+    // Vulkan
     VkAllocationCallbacks *allocator;
     VkInstance instance;
     uint32_t api_version;
+
 } State;
 
 void setupErrorHandling() {
@@ -46,7 +52,7 @@ void initializeWindow(State *state) {
     if (state->window_fullscreen) {
         state->window_monitor = glfwGetPrimaryMonitor();
     }
-    state->window = glfwCreateWindow(state->width, state->height, (const char*) state->window_title, state->window_monitor, NULL);
+    state->window = glfwCreateWindow(state->width, state->height, state->window_title, state->window_monitor, NULL);
 }
 
 void createVKInstance(State *state) {
@@ -55,14 +61,16 @@ void createVKInstance(State *state) {
 
     VkApplicationInfo applicationInfo = {
             .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
-            .apiVersion = state->api_version
+            .apiVersion = state->api_version,
+            .pApplicationName = state->applicationName,
+            .pEngineName = state->engineName
     };
 
     VkInstanceCreateInfo instanceCreateInfo = {
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
         .pApplicationInfo = &applicationInfo,
         .enabledExtensionCount = extensions_count,
-        .ppEnabledExtensionNames = extensions
+        .ppEnabledExtensionNames = extensions,
     };
     PANIC(vkCreateInstance(&instanceCreateInfo, state->allocator, &state->instance), "Could not create VK Instance!");
 }
@@ -81,12 +89,15 @@ void engineLoop(State *state) {
 
 void engineCleanup(State *state) {
     glfwDestroyWindow(state->window);
-    state->window = NULL;
+    vkDestroyInstance(state->instance, state->allocator);
 }
 
 int main() {
+    const char *name = "Vulkan Test";
     State state = {
-            .window_title = (char**)"Vulkan Test",
+            .applicationName = name,
+            .engineName = name,
+            .window_title = name,
             .width = 800,
             .height = 600,
             .resizable = true,
