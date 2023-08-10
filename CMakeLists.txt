@@ -13,12 +13,12 @@ find_package(Vulkan REQUIRED)
 add_executable(VulkanTest main.c)
 
 target_include_directories(${PROJECT_NAME} PUBLIC
-        external/cglm/include
-        external/glfw/include
+        lib/cglm/include
+        lib/glfw/include
         ${Vulkan_INCLUDE_DIRS}
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${VULKAN_LIBRARIES} glfw)
 
-add_subdirectory(external/cglm)
-add_subdirectory(external/glfw)
+add_subdirectory(lib/cglm)
+add_subdirectory(lib/glfw)
