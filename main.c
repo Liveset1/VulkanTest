@@ -28,8 +28,9 @@ typedef struct {
     bool resizable;
     bool window_fullscreen;
 
-    VkAllocationCallbacks allocator;
+    VkAllocationCallbacks *allocator;
     VkInstance instance;
+    uint32_t api_version;
 } State;
 
 void setupErrorHandling() {
@@ -49,7 +50,21 @@ void initializeWindow(State *state) {
 }
 
 void createVKInstance(State *state) {
+    uint32_t extensions_count;
+    const char **extensions = glfwGetRequiredInstanceExtensions(&extensions_count);
 
+    VkApplicationInfo applicationInfo = {
+            .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+            .apiVersion = state->api_version
+    };
+
+    VkInstanceCreateInfo instanceCreateInfo = {
+        .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+        .pApplicationInfo = &applicationInfo,
+        .enabledExtensionCount = extensions_count,
+        .ppEnabledExtensionNames = extensions
+    };
+    PANIC(vkCreateInstance(&instanceCreateInfo, state->allocator, &state->instance), "Could not create VK Instance!");
 }
 
 void initializeEngine(State *state) {
@@ -76,6 +91,7 @@ int main() {
             .height = 600,
             .resizable = true,
             .window_fullscreen = false,
+            .api_version = VK_API_VERSION_1_0,
     };
 
     initializeEngine(&state);
