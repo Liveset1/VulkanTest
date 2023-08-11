@@ -10,7 +10,14 @@ set(CMAKE_C_STANDARD 11)
 
 find_package(Vulkan REQUIRED)
 
-add_executable(VulkanTest main.c)
+add_executable(VulkanTest src/main.c
+        src/utils.h
+        src/toolkit.h
+        src/headers.h
+        src/context.h
+        src/window.h
+        src/application.h
+        src/renderer.h)
 
 target_include_directories(${PROJECT_NAME} PUBLIC
         lib/cglm/include
