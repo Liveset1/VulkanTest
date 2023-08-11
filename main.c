@@ -10,7 +10,7 @@
 
 // GLFW Error Callback
 void glfwErrorCallback(int error_code, const char *description) {
-    PANIC(error_code, "GLFW Error Callback: %s", description);
+    PANIC(error_code, "GLFW Error Callback: %s", description)
 }
 
 // Exit Callback
@@ -41,6 +41,7 @@ typedef struct {
     uint32_t queueFamily;
     VkDevice device;
     VkQueue queue;
+    VkSwapchainKHR swapchain;
 } State;
 
 void setupErrorHandling() {
@@ -56,7 +57,7 @@ void initializeWindow(State *state) {
     if (state->windowFullScreen) {
         state->windowMonitor = glfwGetPrimaryMonitor();
         // Setting Width and Height to Monitor Resolution
-        GLFWvidmode *mode = glfwGetVideoMode(state->windowMonitor);
+        const GLFWvidmode *mode = glfwGetVideoMode(state->windowMonitor);
         state->width = mode->width;
         state->height = mode->height;
     }
@@ -80,18 +81,18 @@ void createVKInstance(State *state) {
         .enabledExtensionCount = extensions_count,
         .ppEnabledExtensionNames = extensions,
     };
-    PANIC(vkCreateInstance(&instanceCreateInfo, state->allocator, &state->instance), "Could not create VK Instance!");
+    PANIC(vkCreateInstance(&instanceCreateInfo, state->allocator, &state->instance), "Could not create VK Instance!")
 }
 
 void selectPhysicalDevice(State *state) {
     uint32_t count;
-    PANIC(vkEnumeratePhysicalDevices(state->instance, &count, NULL), "Could not enumerate physical devices count!");
-    PANIC(count == 0, "Could not find a vulkan supported physical device!");
-    PANIC(vkEnumeratePhysicalDevices(state->instance, &count, &state->physicalDevice), "Could not enumerate physical devices count!");
+    PANIC(vkEnumeratePhysicalDevices(state->instance, &count, NULL), "Could not enumerate physical devices count!")
+    PANIC(count == 0, "Could not find a vulkan supported physical device!")
+    PANIC(vkEnumeratePhysicalDevices(state->instance, &count, &state->physicalDevice), "Could not enumerate physical devices count!")
 }
 
 void createSurface(State *state) {
-    PANIC(glfwCreateWindowSurface(state->instance, state->window, state->allocator, &state->surface), "Could not create window surface!");
+    PANIC(glfwCreateWindowSurface(state->instance, state->window, state->allocator, &state->surface), "Could not create window surface!")
 }
 
 void selectQueueFamily(State *state) {
@@ -111,7 +112,7 @@ void selectQueueFamily(State *state) {
             break;
         }
     }
-    PANIC(state->queueFamily == UINT32_MAX, "Could not find a suitable Queue Family!");
+    PANIC(state->queueFamily == UINT32_MAX, "Could not find a suitable Queue Family!")
     free(queueFamilies);
 }
 
@@ -127,11 +128,95 @@ void createVKDevice(State *state) {
         .queueCreateInfoCount = 1,
         .enabledExtensionCount = 1,
         .ppEnabledExtensionNames = &(const char*) {VK_KHR_SWAPCHAIN_EXTENSION_NAME}
-    }, state->allocator, &state->device), "Could not create VK Device and Queues!");
+    }, state->allocator, &state->device), "Could not create VK Device and Queues!")
 }
 
 void getVKQueue(State *state) {
     vkGetDeviceQueue(state->device, state->queueFamily, 0, &state->queue);
+}
+
+uint32_t clamp(uint32_t value, uint32_t min, uint32_t max) {
+    if (value < min) {
+        return min;
+    } else if (value > max) {
+        return max;
+    }
+    return value;
+}
+
+void createSwapchains(State *state) {
+    VkSurfaceCapabilitiesKHR capabilities;
+
+    PANIC(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+            state->physicalDevice, state->surface, &capabilities), "Failed to get physical device surface capabilities!")
+
+    uint32_t formatCount;
+    PANIC(vkGetPhysicalDeviceSurfaceFormatsKHR(
+            state->physicalDevice, state->surface, &formatCount, NULL), "Could not get surface formats!")
+    VkSurfaceFormatKHR *formats = malloc(formatCount * sizeof(VkSurfaceFormatKHR));
+    PANIC(!formats, "Failed to allocate memory for surface formats")
+    PANIC(vkGetPhysicalDeviceSurfaceFormatsKHR(
+            state->physicalDevice, state->surface, &formatCount, formats), "Could not get surface formats!")
+
+    uint32_t formatIndex = 0;
+    for (int i = 0; i < formatCount; ++i) {
+        VkSurfaceFormatKHR format = formats[i];
+        if (format.colorSpace == VK_COLORSPACE_SRGB_NONLINEAR_KHR && format.format == VK_FORMAT_B8G8R8A8_SRGB) {
+            formatIndex = i;
+            break;
+        }
+    }
+    VkSurfaceFormatKHR format = formats[formatIndex];
+
+    VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
+
+    uint32_t presentModeCount;
+    PANIC(vkGetPhysicalDeviceSurfacePresentModesKHR(
+            state->physicalDevice, state->surface, &presentModeCount, NULL), "Failed to get surface present mode count!")
+    VkPresentModeKHR *modes = malloc(presentModeCount * sizeof(VkPresentModeKHR));
+    PANIC(!modes, "Failed to allocate memory for surface present modes!")
+    PANIC(vkGetPhysicalDeviceSurfacePresentModesKHR(
+            state->physicalDevice, state->surface, &presentModeCount, modes), "Failed to get surface present modes!")
+
+    uint32_t modeIndex = UINT32_MAX;
+    for (int i = 0; i < presentModeCount; ++i) {
+        VkPresentModeKHR mode = modes[i];
+        if (mode == VK_PRESENT_MODE_MAILBOX_KHR) {
+            modeIndex = i;
+            break;
+        }
+    }
+
+    if (modeIndex != UINT32_MAX) {
+        presentMode = modes[modeIndex];
+    }
+
+    free(modes);
+    free(formats);
+    
+    VkSwapchainKHR swapchain;
+    PANIC(vkCreateSwapchainKHR(state->device, &(VkSwapchainCreateInfoKHR){
+        .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+        .surface = state->surface,
+        .queueFamilyIndexCount = 1,
+        .pQueueFamilyIndices = &state->queueFamily,
+        .clipped = true,
+        .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+        .imageArrayLayers = 1,
+        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        .oldSwapchain = state->swapchain,
+        .preTransform = capabilities.currentTransform,
+        .imageExtent = (VkExtent2D) {
+                .width = clamp(capabilities.currentExtent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
+                .height = clamp(capabilities.currentExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height)
+            },
+        .imageFormat = format.format,
+        .imageColorSpace = format.colorSpace,
+        .presentMode = presentMode,
+        .minImageCount = clamp(3, capabilities.minImageCount, capabilities.maxImageCount ? capabilities.maxImageCount : UINT32_MAX)
+        }, state->allocator, &swapchain), "Failed to create Swap chain!")
+    vkDestroySwapchainKHR(state->device, state->swapchain, state->allocator);
+    state->swapchain = swapchain;
 }
 
 void initializeEngine(State *state) {
@@ -144,6 +229,8 @@ void initializeEngine(State *state) {
     selectQueueFamily(state);
     createVKDevice(state);
     getVKQueue(state);
+
+    createSwapchains(state);
 }
 
 void engineLoop(State *state) {
@@ -153,6 +240,7 @@ void engineLoop(State *state) {
 }
 
 void engineCleanup(State *state) {
+    vkDestroySwapchainKHR(state->device, state->swapchain, state->allocator);
     vkDestroyDevice(state->device, state->allocator);
     vkDestroySurfaceKHR(state->instance, state->surface, state->allocator);
     glfwDestroyWindow(state->window);
